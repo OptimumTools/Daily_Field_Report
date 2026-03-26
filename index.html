@@ -285,7 +285,7 @@ table.rt .ah-row .tc{color:var(--r600)}
   <div class="sec-h"><span class="ic">🌤️</span> Weather Conditions</div>
   <div class="sec-b">
     <div id="wxContent"><div class="wx-status">Select a location to auto-fetch weather</div></div>
-    <div class="wx-note" id="wxNote" style="display:none">Weather auto-fetched · Editable if needed</div>
+    <div class="wx-note" id="wxNote" style="display:none">Weather auto-fetched · <button onclick="switchToManualWx()" style="background:none;border:none;color:var(--g600);font-size:12px;font-weight:600;cursor:pointer;padding:0;text-decoration:underline;">Edit manually</button></div>
   </div>
 </div>
 
@@ -602,6 +602,58 @@ function renderWx(){
 }
 function renderManWx(){
   document.getElementById('wxContent').innerHTML=`<div class="wx-manual"><div class="wx-grid">${['6:00 AM','12:00 PM','4:00 PM'].map((t,i)=>`<div class="wx-card"><div class="wx-t" style="text-align:center;font-size:11px;font-weight:700;color:var(--g600)">${t}</div><label>Temp (°F)</label><input type="number" id="mt${i}"><label>Conditions</label><select id="mc${i}"><option>Clear</option><option>Partly Cloudy</option><option>Overcast</option><option>Rain</option><option>Snow</option><option>Fog</option><option>High Winds</option></select><label>Wind (MPH)</label><input type="number" id="mw${i}"><label>Humidity (%)</label><input type="number" id="mh${i}"></div>`).join('')}</div></div>`;
+}
+
+function switchToManualWx() {
+  // Pre-populate manual fields from auto-fetched data if available
+  renderManWx();
+  if (weatherData) {
+    weatherData.forEach((w, i) => {
+      const t = document.getElementById('mt' + i);
+      const c = document.getElementById('mc' + i);
+      const wind = document.getElementById('mw' + i);
+      const h = document.getElementById('mh' + i);
+      if (t) t.value = w.temp;
+      if (wind) wind.value = w.wind;
+      if (h) h.value = w.humidity;
+      // Match condition text to select option
+      if (c) {
+        const opts = Array.from(c.options).map(o => o.value);
+        const match = opts.find(o => w.cond.toLowerCase().includes(o.toLowerCase()));
+        if (match) c.value = match;
+      }
+    });
+  }
+  // Update weatherData from manual fields on any change
+  document.getElementById('wxContent').querySelectorAll('input,select').forEach(el => {
+    el.addEventListener('input', syncManualWx);
+    el.addEventListener('change', syncManualWx);
+  });
+  document.getElementById('wxNote').innerHTML = 'Editing manually · <button onclick="refetchWx()" style="background:none;border:none;color:var(--g600);font-size:12px;font-weight:600;cursor:pointer;padding:0;text-decoration:underline;">Restore auto-fetch</button>';
+}
+
+function syncManualWx() {
+  const times = ['6:00 AM', '12:00 PM', '4:00 PM'];
+  weatherData = times.map((time, i) => ({
+    time,
+    temp: document.getElementById('mt' + i)?.value || '—',
+    cond: document.getElementById('mc' + i)?.value || '—',
+    wind: document.getElementById('mw' + i)?.value || '—',
+    humidity: document.getElementById('mh' + i)?.value || '—',
+    precip: '—',
+    icon: '✏️'
+  }));
+  autoSave();
+}
+
+function refetchWx() {
+  const locVal = document.getElementById('sel_location')?.value;
+  if (locVal && locVal.includes(',')) {
+    const [lat, lon] = locVal.split(',');
+    fetchWx(lat, lon);
+  } else {
+    clearWeather();
+  }
 }
 
 // ─── PHOTOS ───
