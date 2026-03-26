@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dfr-v1';
+const CACHE_NAME = 'dfr-v2';
 const ASSETS = [
   './',
   './index.html',
