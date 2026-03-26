@@ -284,8 +284,8 @@ table.rt .ah-row .tc{color:var(--r600)}
 <div class="sec">
   <div class="sec-h"><span class="ic">🌤️</span> Weather Conditions</div>
   <div class="sec-b">
-    <div id="wxContent"><div class="wx-status">Select a location to auto-fetch weather</div></div>
-    <div class="wx-note" id="wxNote" style="display:none">Weather auto-fetched · <button onclick="switchToManualWx()" style="background:none;border:none;color:var(--g600);font-size:12px;font-weight:600;cursor:pointer;padding:0;text-decoration:underline;">Edit manually</button></div>
+    <div id="wxContent"></div>
+    <div class="wx-note" id="wxNote">Enter weather manually · <button onclick="refetchWx()" style="background:none;border:none;color:var(--g600);font-size:12px;font-weight:600;cursor:pointer;padding:0;text-decoration:underline;">Auto-fetch from location</button></div>
   </div>
 </div>
 
@@ -480,6 +480,7 @@ function init() {
   setupDD();
   loadQueue();
   window.addEventListener('online', processQueue);
+  clearWeather(); // Start with manual entry fields as default
 }
 
 function populateDDs() {
@@ -569,9 +570,15 @@ function onLocationChange() {
   fetchWx(lat, lon);
 }
 function clearWeather() {
-  document.getElementById('wxContent').innerHTML = '<div class="wx-status">Select a location to auto-fetch weather</div>';
-  document.getElementById('wxNote').style.display = 'none';
+  renderManWx();
+  // wxNote always visible
   weatherData = null;
+  // Attach sync listeners
+  document.getElementById('wxContent').querySelectorAll('input,select').forEach(el => {
+    el.addEventListener('input', syncManualWx);
+    el.addEventListener('change', syncManualWx);
+  });
+  document.getElementById('wxNote').innerHTML = 'Enter weather manually · <button onclick="refetchWx()" style="background:none;border:none;color:var(--g600);font-size:12px;font-weight:600;cursor:pointer;padding:0;text-decoration:underline;">Auto-fetch from location</button>';
 }
 async function fetchWx(lat, lon) {
   const el = document.getElementById('wxContent');
@@ -588,7 +595,7 @@ async function fetchWx(lat, lon) {
       cond:wxT(h.weather_code[s.i]), icon:wxI(h.weather_code[s.i])
     }));
     renderWx();
-    document.getElementById('wxNote').style.display = 'block';
+    document.getElementById('wxNote').innerHTML = 'Weather auto-fetched · <button onclick="switchToManualWx()" style="background:none;border:none;color:var(--g600);font-size:12px;font-weight:600;cursor:pointer;padding:0;text-decoration:underline;">Edit manually</button>';
   } catch(e) {
     el.innerHTML = '<div class="wx-status">⚠️ Could not fetch weather — enter manually</div>';
     renderManWx();
@@ -1219,11 +1226,18 @@ function restoreDraft() {
     document.querySelectorAll('.dd-wrap').forEach(el => {
       if (el.id && state['oth_' + el.id]) el.classList.add('oth-on');
     });
-    // Weather data
-    if (state['_weatherData']) {
-      weatherData = state['_weatherData'];
-      if (typeof renderWeather === 'function') renderWeather(weatherData);
-    }
+    // Weather — re-trigger fetch from restored location so it stays live
+    // Small delay so the select value is fully restored before firing
+    setTimeout(() => {
+      const locVal = document.getElementById('sel_location')?.value;
+      if (locVal && locVal.includes(',')) {
+        onLocationChange();
+      } else if (state['_weatherData']) {
+        // Fallback: render saved weather if no location to re-fetch from
+        weatherData = state['_weatherData'];
+        renderWx();
+      }
+    }, 800);
     // Note: photos can't be restored from localStorage due to size limits
     // Tech will need to re-attach photos — all other data is preserved
   } catch(e) {
