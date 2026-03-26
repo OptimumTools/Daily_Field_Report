@@ -845,6 +845,7 @@ async function submitReport() {
     // Convert to base64 and send to Power Automate
     const pdfBase64 = await blobToBase64(lastPdfBlob);
     await queueReport(report, pdfBase64);
+    clearDraft();
 
     toast('✅ Report ready — tap Save PDF or Share to download');
   } catch(e) {
@@ -1099,10 +1100,98 @@ function clearForm() {
   document.getElementById('rptDate').valueAsDate = new Date();
   photosBefore=[];photosAfter=[];renderPh('before');renderPh('after');
   clearWeather();reportHTML='';
+  clearDraft();
+}
+
+// ─── AUTO-SAVE ───
+const DRAFT_KEY = 'dfr_draft';
+let autoSaveTimer = null;
+
+function autoSave() {
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(() => {
+    try {
+      const state = {};
+      // Text, email, number, date, textarea fields
+      document.querySelectorAll('input[type=text], input[type=number], input[type=email], input[type=date], textarea').forEach(el => {
+        if (el.id) state[el.id] = el.value;
+      });
+      // Select dropdowns
+      document.querySelectorAll('select').forEach(el => {
+        if (el.id) state['sel_' + el.id] = el.value;
+      });
+      // Checkboxes
+      document.querySelectorAll('input[type=checkbox]').forEach(el => {
+        if (el.id) state['cb_' + el.id] = el.checked;
+      });
+      // Other toggle states (dd-wrap oth-on)
+      document.querySelectorAll('.dd-wrap').forEach(el => {
+        if (el.id) state['oth_' + el.id] = el.classList.contains('oth-on');
+      });
+      // Signatures (text fields)
+      ['techSig', 'superSig'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) state[id] = el.value;
+      });
+      // Weather data
+      if (weatherData) state['_weatherData'] = weatherData;
+      // Photos — store metadata only (not full base64 to avoid localStorage limits)
+      state['_photoBeforeCount'] = photosBefore.length;
+      state['_photoAfterCount'] = photosAfter.length;
+
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(state));
+    } catch(e) {
+      console.warn('Auto-save failed:', e);
+    }
+  }, 2000);
+}
+
+function restoreDraft() {
+  try {
+    const saved = localStorage.getItem(DRAFT_KEY);
+    if (!saved) return;
+    const state = JSON.parse(saved);
+    // Text, email, number, date, textarea
+    document.querySelectorAll('input[type=text], input[type=number], input[type=email], input[type=date], textarea').forEach(el => {
+      if (el.id && state[el.id] !== undefined) el.value = state[el.id];
+    });
+    // Selects
+    document.querySelectorAll('select').forEach(el => {
+      if (el.id && state['sel_' + el.id] !== undefined) el.value = state['sel_' + el.id];
+    });
+    // Checkboxes
+    document.querySelectorAll('input[type=checkbox]').forEach(el => {
+      if (el.id && state['cb_' + el.id] !== undefined) el.checked = state['cb_' + el.id];
+    });
+    // Other toggle states
+    document.querySelectorAll('.dd-wrap').forEach(el => {
+      if (el.id && state['oth_' + el.id]) el.classList.add('oth-on');
+    });
+    // Weather data
+    if (state['_weatherData']) {
+      weatherData = state['_weatherData'];
+      if (typeof renderWeather === 'function') renderWeather(weatherData);
+    }
+    // Note: photos can't be restored from localStorage due to size limits
+    // Tech will need to re-attach photos — all other data is preserved
+  } catch(e) {
+    console.warn('Draft restore failed:', e);
+  }
+}
+
+function clearDraft() {
+  localStorage.removeItem(DRAFT_KEY);
+}
+
+function attachAutoSave() {
+  document.addEventListener('input', autoSave);
+  document.addEventListener('change', autoSave);
 }
 
 document.addEventListener('keydown', e => {if(e.key==='Escape')closePrint()});
 init();
+attachAutoSave();
+setTimeout(restoreDraft, 500);
 </script>
 </body>
 </html>
